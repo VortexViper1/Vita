@@ -1,0 +1,17 @@
+{
+  "plugins": [
+    "expo-router",
+    "expo-font",
+    "expo-status-bar",
+    [
+      "@appeeky/expo-healthkit",
+      {
+        "isClinicalDataEnabled": true
+      }
+    ],
+    "expo-secure-store"
+  ],
+  "android": {
+    "package": "com.anonymous.healthtracker"
+  }
+}
