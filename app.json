@@ -4,7 +4,7 @@
     "slug": "healthtracker",
     "version": "1.0.0",
     "scheme": "healthtracker",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon.jpeg",
     "plugins": [
       "expo-router",
       "expo-font",

@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import * as Linking from "expo-linking";
 import { supabase } from "../../src/lib/supabase";
 import { useKeyboardVisible } from "../../src/hooks/Usekeyboardvisible";
 import { useTransitionNavigate } from "../../src/components/navigation/Transitionprovider";
@@ -200,11 +200,12 @@ export default function RegisterScreen() {
       const { data, error } = await supabase.auth.signUp({
         email: values.email.trim(),
         password: values.password,
-        options: {
-          data: {
-            full_name: values.fullName.trim(),
-          },
-        },
+options: {
+  data: {
+    full_name: values.fullName.trim(),
+  },
+  emailRedirectTo: Linking.createURL("auth/callback"),
+},
       });
 
       if (error) {

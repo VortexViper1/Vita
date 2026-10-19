@@ -1,0 +1,16 @@
+
+node_modules/
+.git/
+.expo/
+dist/
+web-build/
+coverage/
+.turbo/
+.cache/
+android/.gradle/
+android/build/
+android/app/build/
+*.log
+.env
+.env.*
+!.env.example
