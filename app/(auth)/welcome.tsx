@@ -1,15 +1,12 @@
-
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
-  Image,
-  ImageSourcePropType,
+  LayoutChangeEvent,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,15 +14,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTransitionNavigate } from "../../src/components/navigation/Transitionprovider";
 import { RotatingVitaRing } from "../../src/components/ui/RotatingVitaRing";
 import { Button } from "../../src/components/ui/Button";
+import { BrandLogo } from "../../src/theme/Brandlogo";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { spacing } from "../../src/theme/spacing";
 
-const LOGO: ImageSourcePropType | null = null;
-const LOGO_ASPECT = 3;
 const SERIF = Platform.select({ ios: "Georgia", default: "serif" });
-const GOLD = "#D6B47A";
 const MINT = "#B7E6CB";
 const DEEP = "#183D32";
+const MAX_RING = 270;
+const MIN_RING = 120;
 
 function useBrand() {
   const { colors, resolvedMode } = useTheme();
@@ -44,9 +41,23 @@ export default function WelcomeScreen() {
   const b = useBrand();
   const insets = useSafeAreaInsets();
   const go = useTransitionNavigate();
-  const { height } = useWindowDimensions();
 
-  const ringSize = Math.max(180, Math.min(270, height * 0.31));
+  // Size the ring from the space that is actually left, so it can never
+  // overflow into the headline or the buttons on short screens.
+  const [stage, setStage] = useState<{ w: number; h: number } | null>(null);
+
+  const onStageLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setStage((previous) =>
+      previous && previous.w === width && previous.h === height
+        ? previous
+        : { w: width, h: height },
+    );
+  }, []);
+
+  const ringSize = stage
+    ? Math.max(MIN_RING, Math.min(MAX_RING, stage.h - spacing.md * 2, stage.w))
+    : 0;
 
   const handleCreateAccount = useCallback(
     () => go("/(auth)/register"),
@@ -80,16 +91,7 @@ export default function WelcomeScreen() {
       />
 
       <Animated.View entering={FadeIn.duration(500)} style={styles.topBar}>
-        <View style={{ height: 30, width: 30 * LOGO_ASPECT }}>
-          {LOGO ? (
-            <Image
-              source={LOGO}
-              accessibilityLabel="Vīta"
-              resizeMode="contain"
-              style={StyleSheet.absoluteFill}
-            />
-          ) : null}
-        </View>
+        <BrandLogo height={30} />
 
         <Pressable
           accessibilityRole="button"
@@ -98,9 +100,7 @@ export default function WelcomeScreen() {
           hitSlop={12}
           style={styles.signIn}
         >
-          <Text style={[styles.signInText, { color: b.soft }]}>
-            Sign in
-          </Text>
+          <Text style={[styles.signInText, { color: b.soft }]}>Sign in</Text>
           <Ionicons
             name="arrow-up-outline"
             size={14}
@@ -111,13 +111,6 @@ export default function WelcomeScreen() {
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(650)} style={styles.hero}>
-        <View style={styles.eyebrow}>
-          <View style={[styles.eyebrowLine, { backgroundColor: GOLD }]} />
-          <Text style={[styles.eyebrowText, { color: b.accent }]}>
-            A MORE HUMAN APPROACH TO HEALTH
-          </Text>
-        </View>
-
         <Text
           accessibilityRole="header"
           maxFontSizeMultiplier={1.2}
@@ -134,22 +127,15 @@ export default function WelcomeScreen() {
         </Text>
       </Animated.View>
 
-      {/* Replaces the old 3D orb */}
-      <View style={styles.ringStage}>
-        <RotatingVitaRing size={ringSize} />
+      <View style={styles.ringStage} onLayout={onStageLayout}>
+        {ringSize > 0 ? <RotatingVitaRing size={ringSize} /> : null}
       </View>
 
       <Animated.View
         entering={FadeInUp.delay(250).duration(600)}
-        style={[
-          styles.bottom,
-          { paddingBottom: insets.bottom + spacing.lg },
-        ]}
+        style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}
       >
-        <Button
-          label="Begin your journey"
-          onPress={handleCreateAccount}
-        />
+        <Button label="Begin your journey" onPress={handleCreateAccount} />
         <Button
           label="I already have an account"
           variant="ghost"
@@ -199,21 +185,6 @@ const styles = StyleSheet.create({
   hero: {
     paddingTop: spacing.xl,
   },
-  eyebrow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: spacing.lg,
-  },
-  eyebrowLine: {
-    width: 24,
-    height: 2,
-  },
-  eyebrowText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-  },
   headline: {
     fontSize: 46,
     lineHeight: 50,
@@ -236,7 +207,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 190,
+    minHeight: MIN_RING + spacing.md * 2,
   },
   bottom: {
     gap: spacing.sm,

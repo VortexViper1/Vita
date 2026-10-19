@@ -53,9 +53,19 @@ export function formatClock(iso: string): string {
 }
 
 export function formatWeekday(date: string): string {
-  return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
-    parseDate(date),
-  );
+  if (!date || typeof date !== "string") {
+    return "—";
+  }
+
+  const parsed = parseDate(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+  }).format(parsed);
 }
 
 export function formatShortDate(date: string): string {

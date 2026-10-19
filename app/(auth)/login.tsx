@@ -1,19 +1,21 @@
-
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../../src/lib/supabase";
+import { useKeyboardVisible } from "../../src/hooks/Usekeyboardvisible";
 import { useTransitionNavigate } from "../../src/components/navigation/Transitionprovider";
 import { RotatingVitaRing } from "../../src/components/ui/RotatingVitaRing";
 import { Button } from "../../src/components/ui/Button";
@@ -39,9 +41,7 @@ function useBrand() {
     ink: dark ? "#F4F1E8" : "#10241D",
     soft: dark ? "#A9B5AE" : "#4C5E56",
     accent: dark ? MINT : DEEP,
-    line: dark
-      ? "rgba(247,244,236,0.16)"
-      : "rgba(24,61,50,0.18)",
+    line: dark ? "rgba(247,244,236,0.16)" : "rgba(24,61,50,0.18)",
   };
 }
 
@@ -49,6 +49,7 @@ export default function LoginScreen() {
   const b = useBrand();
   const insets = useSafeAreaInsets();
   const go = useTransitionNavigate();
+  const keyboardVisible = useKeyboardVisible();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,40 +57,45 @@ export default function LoginScreen() {
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
-  const emailError =
-    emailTouched && !email.trim()
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+
+  const emailError = !emailTouched
+    ? undefined
+    : !email.trim()
       ? "Enter your email address."
-      : emailTouched && !EMAIL_PATTERN.test(email.trim())
+      : !EMAIL_PATTERN.test(email.trim())
         ? "Enter a valid email address."
         : undefined;
 
   const passwordError =
-    passwordTouched && !password
-      ? "Enter your password."
-      : undefined;
+    passwordTouched && !password ? "Enter your password." : undefined;
 
-  const handleBack = useCallback(
-    () => go("/(auth)/welcome"),
-    [go],
-  );
-
-  const handleRegister = useCallback(
-    () => go("/(auth)/register"),
-    [go],
-  );
-
-  const handleForgotPassword = useCallback(async () => {
+  const clearMessages = useCallback(() => {
     setFormError(undefined);
     setStatusMessage(undefined);
+  }, []);
+
+  const handleBack = useCallback(() => go("/(auth)/welcome"), [go]);
+  const handleRegister = useCallback(() => go("/(auth)/register"), [go]);
+
+  const handleForgotPassword = useCallback(async () => {
+    if (isResetting) return;
+    clearMessages();
 
     if (!EMAIL_PATTERN.test(email.trim())) {
       setEmailTouched(true);
       setFormError("Enter your email address first.");
+      emailRef.current?.focus();
       return;
     }
+
+    Keyboard.dismiss();
+    setIsResetting(true);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
@@ -106,19 +112,28 @@ export default function LoginScreen() {
       );
     } catch {
       setFormError("Unable to request a reset link. Please try again.");
+    } finally {
+      setIsResetting(false);
     }
-  }, [email]);
+  }, [clearMessages, email, isResetting]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
 
     setEmailTouched(true);
     setPasswordTouched(true);
-    setFormError(undefined);
-    setStatusMessage(undefined);
+    clearMessages();
 
-    if (!EMAIL_PATTERN.test(email.trim()) || !password) return;
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      emailRef.current?.focus();
+      return;
+    }
+    if (!password) {
+      passwordRef.current?.focus();
+      return;
+    }
 
+    Keyboard.dismiss();
     setIsSubmitting(true);
 
     try {
@@ -128,35 +143,37 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        setFormError(
-          error.message === "Invalid login credentials"
-            ? "Email or password is incorrect."
-            : error.message,
-        );
+        if (error.message === "Invalid login credentials") {
+          setFormError("Email or password is incorrect.");
+        } else if (error.message === "Email not confirmed") {
+          setFormError("Please confirm your email before signing in.");
+        } else {
+          setFormError(error.message);
+        }
         return;
       }
 
-      // AuthGate listens for the session and redirects to /(tabs).
+      // Show Vīta's transition splash, then open the dashboard.
+      go("/(tabs)");
     } catch {
       setFormError("Unable to sign in right now. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [email, isSubmitting, password]);
+  }, [clearMessages, email, go, isSubmitting, password]);
 
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: b.bg }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // "padding" on both platforms: Android is edge-to-edge on current Expo
+      // SDKs, so the OS no longer resizes the window for the keyboard.
+      behavior="padding"
     >
       <View
         pointerEvents="none"
         style={[
           styles.glow,
-          {
-            backgroundColor: MINT,
-            opacity: b.dark ? 0.06 : 0.35,
-          },
+          { backgroundColor: MINT, opacity: b.dark ? 0.06 : 0.35 },
         ]}
       />
 
@@ -165,16 +182,17 @@ export default function LoginScreen() {
           styles.scrollContent,
           {
             paddingTop: insets.top + spacing.md,
-            paddingBottom: insets.bottom + spacing.xl,
+            // The keyboard already covers the bottom inset while open.
+            paddingBottom: keyboardVisible
+              ? spacing.xl
+              : insets.bottom + spacing.xl,
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
-          entering={FadeIn.duration(500)}
-          style={styles.topBar}
-        >
+        <Animated.View entering={FadeIn.duration(500)} style={styles.topBar}>
           <Pressable
             onPress={handleBack}
             accessibilityRole="button"
@@ -190,11 +208,8 @@ export default function LoginScreen() {
           <View style={styles.backSpacer} />
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInDown.duration(650)}
-          style={styles.hero}
-        >
-          <View style={styles.ringCorner}>
+        <Animated.View entering={FadeInDown.duration(650)} style={styles.hero}>
+          <View pointerEvents="none" style={styles.ringCorner}>
             <RotatingVitaRing size={116} />
           </View>
 
@@ -204,9 +219,7 @@ export default function LoginScreen() {
             style={[styles.title, { color: b.ink }]}
           >
             Good to{"\n"}
-            <Text style={[styles.accent, { color: b.accent }]}>
-              see you.
-            </Text>
+            <Text style={[styles.accent, { color: b.accent }]}>see you.</Text>
           </Text>
 
           <Text style={[styles.subtitle, { color: b.soft }]}>
@@ -220,11 +233,11 @@ export default function LoginScreen() {
         >
           <TextField
             label="Email address"
+            inputRef={emailRef}
             value={email}
             onChangeText={(value) => {
               setEmail(value);
-              setFormError(undefined);
-              setStatusMessage(undefined);
+              clearMessages();
             }}
             onBlur={() => setEmailTouched(true)}
             error={emailError}
@@ -235,15 +248,17 @@ export default function LoginScreen() {
             autoComplete="email"
             textContentType="emailAddress"
             returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
 
           <TextField
             label="Password"
+            inputRef={passwordRef}
             value={password}
             onChangeText={(value) => {
               setPassword(value);
-              setFormError(undefined);
-              setStatusMessage(undefined);
+              clearMessages();
             }}
             onBlur={() => setPasswordTouched(true)}
             error={passwordError}
@@ -266,11 +281,14 @@ export default function LoginScreen() {
 
           <Pressable
             onPress={handleForgotPassword}
+            disabled={isResetting}
             accessibilityRole="button"
-            style={styles.forgotPassword}
+            accessibilityState={{ disabled: isResetting }}
+            hitSlop={8}
+            style={[styles.forgotPassword, isResetting && styles.dimmed]}
           >
             <Text style={[styles.forgotText, { color: b.accent }]}>
-              Forgot password?
+              {isResetting ? "Sending…" : "Forgot password?"}
             </Text>
           </Pressable>
 
@@ -385,6 +403,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     paddingVertical: 4,
   },
+  dimmed: { opacity: 0.5 },
   forgotText: {
     fontSize: 13,
     fontWeight: "600",

@@ -1,17 +1,102 @@
 {
-  "plugins": [
-    "expo-router",
-    "expo-font",
-    "expo-status-bar",
-    [
-      "@appeeky/expo-healthkit",
-      {
-        "isClinicalDataEnabled": true
-      }
+  "expo": {
+    "name": "Vīta",
+    "slug": "healthtracker",
+    "version": "1.0.0",
+    "scheme": "healthtracker",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "backgroundColor": "#0A0F0D",
+      "resizeMode": "contain"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-status-bar",
+      [
+        "@appeeky/expo-healthkit",
+        {
+          "healthSharePermission": "Vita reads your health data to show your activity, sleep, and body measurements.",
+          "healthUpdatePermission": "Vita may save supported health data when you choose to use a save feature.",
+          "isClinicalDataEnabled": true
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0F0D"
+        }
+      ],
+      "react-native-health-connect"
     ],
-    "expo-secure-store"
-  ],
-  "android": {
-    "package": "com.anonymous.healthtracker"
+    "ios": {
+      "bundleIdentifier": "com.anonymous.healthtracker",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.anonymous.healthtracker",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0A0F0D"
+      },
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_HYDRATION",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_NUTRITION",
+        "android.permission.health.WRITE_STEPS",
+        "android.permission.health.WRITE_DISTANCE",
+        "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.health.WRITE_TOTAL_CALORIES_BURNED",
+        "android.permission.health.READ_FLOORS_CLIMBED",
+        "android.permission.health.WRITE_FLOORS_CLIMBED",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.WRITE_HEART_RATE",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.WRITE_RESTING_HEART_RATE",
+        "android.permission.health.READ_HEART_RATE_VARIABILITY",
+        "android.permission.health.WRITE_HEART_RATE_VARIABILITY",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.WRITE_OXYGEN_SATURATION",
+        "android.permission.health.READ_RESPIRATORY_RATE",
+        "android.permission.health.WRITE_RESPIRATORY_RATE",
+        "android.permission.health.READ_BODY_TEMPERATURE",
+        "android.permission.health.WRITE_BODY_TEMPERATURE",
+        "android.permission.health.READ_BLOOD_GLUCOSE",
+        "android.permission.health.WRITE_BLOOD_GLUCOSE",
+        "android.permission.health.READ_BLOOD_PRESSURE",
+        "android.permission.health.WRITE_BLOOD_PRESSURE",
+        "android.permission.health.READ_VO2_MAX",
+        "android.permission.health.WRITE_VO2_MAX",
+        "android.permission.health.READ_HEIGHT",
+        "android.permission.health.WRITE_HEIGHT",
+        "android.permission.health.WRITE_WEIGHT",
+        "android.permission.health.READ_BODY_FAT",
+        "android.permission.health.WRITE_BODY_FAT",
+        "android.permission.health.READ_LEAN_BODY_MASS",
+        "android.permission.health.WRITE_LEAN_BODY_MASS",
+        "android.permission.health.WRITE_SLEEP",
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.WRITE_NUTRITION",
+        "android.permission.health.WRITE_HYDRATION",
+        "android.permission.health.READ_WHEELCHAIR_PUSHES",
+        "android.permission.health.WRITE_WHEELCHAIR_PUSHES",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY"
+      ]
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b61d2e03-cf72-4342-ab4a-e5e5f036ff31"
+      }
+    }
   }
 }

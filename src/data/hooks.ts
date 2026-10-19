@@ -13,6 +13,14 @@ export const useNutrition = () =>
 export const useHydration = () =>
   useResource(healthDataSource.getHydration ?? null);
 
-export const useSleep = () => useResource(healthDataSource.getSleep ?? null);
+export const useSleep = () =>
+  useResource(healthDataSource.getSleep ?? null);
 
-export const useBody = () => useResource(healthDataSource.getBody ?? null);
+/**
+ * Weight data is loaded by healthDataSource.getBody in source.ts. That loader
+ * merges Health Connect readings with manual body_measurements from Supabase.
+ * The returned Resource exposes refresh() when its state supports refreshing;
+ * screens should guard that call because unavailable resources have no refresh.
+ */
+export const useBody = () =>
+  useResource(healthDataSource.getBody ?? null);

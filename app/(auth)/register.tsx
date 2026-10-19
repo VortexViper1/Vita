@@ -1,8 +1,9 @@
-
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +16,7 @@ import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../../src/lib/supabase";
+import { useKeyboardVisible } from "../../src/hooks/Usekeyboardvisible";
 import { useTransitionNavigate } from "../../src/components/navigation/Transitionprovider";
 import { Button } from "../../src/components/ui/Button";
 import { TextField } from "../../src/components/ui/TextField";
@@ -34,6 +36,9 @@ const FIELD_ORDER: FormField[] = [
   "password",
   "confirmPassword",
 ];
+
+// Space kept above a focused field when auto-scrolling it into view.
+const FOCUS_TOP_OFFSET = 120;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GREEN = "#183D32";
@@ -75,14 +80,13 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const go = useTransitionNavigate();
   const dark = resolvedMode === "dark";
+  const keyboardVisible = useKeyboardVisible();
 
   const bg = dark ? colors.background : "#F7F4EC";
   const ink = dark ? "#F4F1E8" : "#10241D";
   const soft = dark ? "#A9B5AE" : "#4C5E56";
   const accent = dark ? MINT : GREEN;
-  const line = dark
-    ? "rgba(247,244,236,0.16)"
-    : "rgba(24,61,50,0.18)";
+  const line = dark ? "rgba(247,244,236,0.16)" : "rgba(24,61,50,0.18)";
 
   const [values, setValues] = useState<FormValues>({
     fullName: "",
@@ -103,17 +107,34 @@ export default function RegisterScreen() {
     confirmPassword: false,
   });
 
+  const scrollRef = useRef<ScrollView>(null);
+  const formY = useRef(0);
+  const fieldY = useRef<Partial<Record<FormField, number>>>({});
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const fullNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
-  const inputRefs = {
-    fullName: fullNameRef,
-    email: emailRef,
-    password: passwordRef,
-    confirmPassword: confirmPasswordRef,
-  };
+  // Stable object so callbacks that use it don't need it as a dependency.
+  const inputRefs = useMemo(
+    () => ({
+      fullName: fullNameRef,
+      email: emailRef,
+      password: passwordRef,
+      confirmPassword: confirmPasswordRef,
+    }),
+    [],
+  );
+
+  // Don't fire a pending scroll after the screen is gone.
+  useEffect(
+    () => () => {
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    },
+    [],
+  );
 
   const errors = useMemo(() => validate(values), [values]);
 
@@ -134,6 +155,30 @@ export default function RegisterScreen() {
     setStatusMessage(undefined);
   }, []);
 
+  const trackFieldLayout = useCallback(
+    (field: FormField) => (event: LayoutChangeEvent) => {
+      fieldY.current[field] = event.nativeEvent.layout.y;
+    },
+    [],
+  );
+
+  // Scrolls a focused field into the visible area above the keyboard.
+  // Slight delay lets the keyboard/avoiding view finish resizing first.
+  const scrollToField = useCallback((field: FormField) => {
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+
+    scrollTimer.current = setTimeout(
+      () => {
+        const y = formY.current + (fieldY.current[field] ?? 0);
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, y - FOCUS_TOP_OFFSET),
+          animated: true,
+        });
+      },
+      Platform.OS === "ios" ? 60 : 160,
+    );
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
 
@@ -148,6 +193,7 @@ export default function RegisterScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setIsSubmitting(true);
 
     try {
@@ -179,22 +225,17 @@ export default function RegisterScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [errors, go, isSubmitting, values]);
+  }, [errors, go, inputRefs, isSubmitting, values]);
 
-  const handleBack = useCallback(
-    () => go("/(auth)/welcome"),
-    [go],
-  );
-
-  const handleSignIn = useCallback(
-    () => go("/(auth)/login"),
-    [go],
-  );
+  const handleBack = useCallback(() => go("/(auth)/welcome"), [go]);
+  const handleSignIn = useCallback(() => go("/(auth)/login"), [go]);
 
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: bg }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // "padding" on both platforms: Android is edge-to-edge on current Expo
+      // SDKs, so the OS no longer resizes the window for the keyboard.
+      behavior="padding"
     >
       <View
         pointerEvents="none"
@@ -213,20 +254,22 @@ export default function RegisterScreen() {
       />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scrollContent,
           {
             paddingTop: insets.top + spacing.md,
-            paddingBottom: insets.bottom + spacing.xl,
+            // The keyboard already covers the bottom inset while open.
+            paddingBottom: keyboardVisible
+              ? spacing.xl
+              : insets.bottom + spacing.xl,
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
-          entering={FadeIn.duration(450)}
-          style={styles.topBar}
-        >
+        <Animated.View entering={FadeIn.duration(450)} style={styles.topBar}>
           <Pressable
             onPress={handleBack}
             accessibilityRole="button"
@@ -246,9 +289,9 @@ export default function RegisterScreen() {
           entering={FadeInDown.duration(600)}
           style={styles.intro}
         >
-
           <Text
             accessibilityRole="header"
+            maxFontSizeMultiplier={1.2}
             style={[styles.title, { color: ink }]}
           >
             Make room{"\n"}for{" "}
@@ -282,80 +325,98 @@ export default function RegisterScreen() {
         <Animated.View
           entering={FadeInDown.delay(120).duration(600)}
           style={styles.form}
+          onLayout={(event) => {
+            formY.current = event.nativeEvent.layout.y;
+          }}
         >
-          <TextField
-            label="Full name"
-            inputRef={fullNameRef}
-            value={values.fullName}
-            onChangeText={(value) => updateField("fullName", value)}
-            onBlur={() => markTouched("fullName")}
-            error={visibleError("fullName")}
-            placeholder="Your full name"
-            autoCapitalize="words"
-            autoComplete="name"
-            textContentType="name"
-            returnKeyType="next"
-            onSubmitEditing={() => emailRef.current?.focus()}
-          />
+          <View onLayout={trackFieldLayout("fullName")}>
+            <TextField
+              label="Full name"
+              inputRef={fullNameRef}
+              value={values.fullName}
+              onChangeText={(value) => updateField("fullName", value)}
+              onFocus={() => scrollToField("fullName")}
+              onBlur={() => markTouched("fullName")}
+              error={visibleError("fullName")}
+              placeholder="Your full name"
+              autoCapitalize="words"
+              autoComplete="name"
+              textContentType="name"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => emailRef.current?.focus()}
+            />
+          </View>
 
-          <TextField
-            label="Email address"
-            inputRef={emailRef}
-            value={values.email}
-            onChangeText={(value) => updateField("email", value)}
-            onBlur={() => markTouched("email")}
-            error={visibleError("email")}
-            placeholder="you@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
-          />
+          <View onLayout={trackFieldLayout("email")}>
+            <TextField
+              label="Email address"
+              inputRef={emailRef}
+              value={values.email}
+              onChangeText={(value) => updateField("email", value)}
+              onFocus={() => scrollToField("email")}
+              onBlur={() => markTouched("email")}
+              error={visibleError("email")}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+          </View>
 
-          <TextField
-            label="Password"
-            inputRef={passwordRef}
-            value={values.password}
-            onChangeText={(value) => updateField("password", value)}
-            onBlur={() => markTouched("password")}
-            error={visibleError("password")}
-            hint={`At least ${MIN_PASSWORD_LENGTH} characters`}
-            placeholder="Create a strong password"
-            secureTextEntry={!passwordVisible}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            returnKeyType="next"
-            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-            action={{
-              label: passwordVisible ? "Hide" : "Show",
-              accessibilityLabel: passwordVisible
-                ? "Hide passwords"
-                : "Show passwords",
-              onPress: () => setPasswordVisible((previous) => !previous),
-            }}
-          />
+          <View onLayout={trackFieldLayout("password")}>
+            <TextField
+              label="Password"
+              inputRef={passwordRef}
+              value={values.password}
+              onChangeText={(value) => updateField("password", value)}
+              onFocus={() => scrollToField("password")}
+              onBlur={() => markTouched("password")}
+              error={visibleError("password")}
+              hint={`At least ${MIN_PASSWORD_LENGTH} characters`}
+              placeholder="Create a strong password"
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+              action={{
+                label: passwordVisible ? "Hide" : "Show",
+                accessibilityLabel: passwordVisible
+                  ? "Hide passwords"
+                  : "Show passwords",
+                onPress: () => setPasswordVisible((previous) => !previous),
+              }}
+            />
+          </View>
 
-          <TextField
-            label="Confirm password"
-            inputRef={confirmPasswordRef}
-            value={values.confirmPassword}
-            onChangeText={(value) => updateField("confirmPassword", value)}
-            onBlur={() => markTouched("confirmPassword")}
-            error={visibleError("confirmPassword")}
-            placeholder="Enter your password again"
-            secureTextEntry={!passwordVisible}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            returnKeyType="go"
-            onSubmitEditing={handleSubmit}
-          />
+          <View onLayout={trackFieldLayout("confirmPassword")}>
+            <TextField
+              label="Confirm password"
+              inputRef={confirmPasswordRef}
+              value={values.confirmPassword}
+              onChangeText={(value) => updateField("confirmPassword", value)}
+              onFocus={() => scrollToField("confirmPassword")}
+              onBlur={() => markTouched("confirmPassword")}
+              error={visibleError("confirmPassword")}
+              placeholder="Enter your password again"
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
+            />
+          </View>
 
           {formError ? (
             <Text
@@ -448,18 +509,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   intro: { marginBottom: spacing.xxl },
-  eyebrow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: spacing.lg,
-  },
-  eyebrowLine: { width: 24, height: 2 },
-  eyebrowText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-  },
   title: {
     fontSize: 44,
     lineHeight: 48,

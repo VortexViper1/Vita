@@ -1,19 +1,18 @@
 /**
- * View-model contract between the UI and your data layer.
+ * View-model contract between the UI and the data layer.
  *
- * These are the shapes the screens render. Your API / Health Connect /
- * HealthKit code maps its own responses into them in `source.ts`; the UI
- * never touches raw API responses.
+ * Health Connect / HealthKit and Supabase responses are mapped to these
+ * shapes in source.ts. UI components should not consume raw provider records.
  */
 
 export interface TrendPoint {
-  /** Calendar date as "YYYY-MM-DD" (treated as local) or a full ISO timestamp. */
+  /** Calendar date as YYYY-MM-DD (local) or a full ISO timestamp. */
   date: string;
   value: number;
 }
 
 export interface DailyScore {
-  /** 0-100 */
+  /** Score from 0 to 100. */
   value: number;
   streakDays?: number;
   goalsComplete?: number;
@@ -23,7 +22,7 @@ export interface DailyScore {
 export interface Workout {
   id: string;
   name: string;
-  /** ISO timestamp */
+  /** ISO timestamp. */
   startedAt: string;
   durationMin: number;
   activeKcal?: number;
@@ -36,14 +35,14 @@ export interface ActivityData {
   activeKcal?: number;
   /** Steps per day, oldest first, ending with today. */
   week?: TrendPoint[];
-  /** Omit if workouts aren't supplied; an empty array means none today. */
+  /** Omitted when workouts are not supplied; [] means no workouts today. */
   workouts?: Workout[];
 }
 
 export interface Meal {
   id: string;
   name: string;
-  /** ISO timestamp */
+  /** ISO timestamp. */
   eatenAt: string;
   calories: number;
   proteinG?: number;
@@ -73,12 +72,12 @@ export interface HydrationData {
 }
 
 export interface SleepData {
-  /** Total time asleep last night. */
+  /** Total time asleep for the most recent sleep session/night. */
   durationMin: number;
   targetMin?: number;
-  /** 0-100 */
+  /** Score from 0 to 100, only when supported or explicitly calculated. */
   score?: number;
-  /** ISO timestamps */
+  /** ISO timestamps. */
   bedtime?: string;
   wakeTime?: string;
   stages?: {
@@ -92,8 +91,12 @@ export interface SleepData {
 }
 
 export interface BodyData {
+  /** Latest weight in kilograms; manual entries may take priority per date. */
   weightKg?: number;
+  /** BMI is only present when a valid height and weight are available. */
   bmi?: number;
+  /** Newest weight minus oldest available weight in the recent 7-day window. */
   weekChangeKg?: number;
+  /** Weight measurements, one value per date, oldest or newest order normalized by the UI. */
   history?: TrendPoint[];
 }

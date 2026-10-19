@@ -54,7 +54,7 @@ function RingArc({
   }));
 
   return (
-    <G rotation="-90" origin={`${center}, ${center}`}>
+<G transform={`rotate(-90 ${center} ${center})`}>
       {/* Track: same hue at low opacity, like Apple's rings */}
       <Circle
         cx={center}

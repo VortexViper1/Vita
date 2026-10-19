@@ -1,6 +1,12 @@
-// src/data/source.ts
+import {
+  aggregateRecord,
+  getGrantedPermissions,
+  initialize,
+  readRecords,
+  requestPermission,
+} from "react-native-health-connect";
 
-import * as HealthKit from "@appeeky/expo-healthkit";
+import { supabase } from "../lib/supabase";
 
 import type {
   ActivityData,
@@ -20,19 +26,78 @@ export interface HealthDataSource {
   getBody?: () => Promise<BodyData>;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Goals (move to user settings later)                                        */
-/* -------------------------------------------------------------------------- */
+const GOALS = { steps: 10000, waterMl: 2500, sleepMin: 480 } as const;
 
-const GOALS = {
-  steps: 10000,
-  waterMl: 2500,
-  sleepMin: 480,
-} as const;
+type HealthRecordType =
+  | "Steps"
+  | "Distance"
+  | "ActiveCaloriesBurned"
+  | "Hydration"
+  | "SleepSession"
+  | "Weight"
+  | "ExerciseSession"
+  | "Nutrition";
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
+const READ_PERMISSIONS = [
+  { accessType: "read" as const, recordType: "Steps" as const },
+  { accessType: "read" as const, recordType: "Distance" as const },
+  { accessType: "read" as const, recordType: "ActiveCaloriesBurned" as const },
+  { accessType: "read" as const, recordType: "Hydration" as const },
+  { accessType: "read" as const, recordType: "SleepSession" as const },
+  { accessType: "read" as const, recordType: "Weight" as const },
+  { accessType: "read" as const, recordType: "ExerciseSession" as const },
+  { accessType: "read" as const, recordType: "Nutrition" as const },
+];
+
+let initialization: Promise<void> | null = null;
+
+async function ensureHealthConnect(): Promise<void> {
+  if (!initialization) {
+    initialization = (async () => {
+      const ready = await initialize();
+
+      if (!ready) {
+        throw new Error(
+          "Health Connect is unavailable. Install or enable Health Connect on this Android device.",
+        );
+      }
+    })().catch((error) => {
+      initialization = null;
+      throw error;
+    });
+  }
+
+  await initialization;
+}
+
+/**
+ * Requests only the permission needed for the current data type.
+ * A denied permission for one metric will not block unrelated metrics.
+ */
+async function ensurePermission(recordType: HealthRecordType): Promise<boolean> {
+  await ensureHealthConnect();
+
+  const required = READ_PERMISSIONS.find(
+    (permission) => permission.recordType === recordType,
+  );
+
+  if (!required) return false;
+
+  let granted = await getGrantedPermissions();
+  const hasPermission = () =>
+    granted.some(
+      (permission) =>
+        permission.accessType === "read" &&
+        permission.recordType === recordType,
+    );
+
+  if (hasPermission()) return true;
+
+  await requestPermission([required]);
+  granted = await getGrantedPermissions();
+
+  return hasPermission();
+}
 
 function startOfToday(): Date {
   const date = new Date();
@@ -46,394 +111,375 @@ function daysAgo(days: number): Date {
   return date;
 }
 
-function toNumber(value: unknown): number {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
+function localDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-/** YYYY-MM-DD in the device's local time (toISOString would shift the day). */
-function toLocalDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+async function currentUserId(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) return null;
+    return data.user.id;
+  } catch {
+    return null;
+  }
 }
 
-type StatsArgs = Parameters<typeof HealthKit.queryStatistics>[0];
+function localDayBounds(date = new Date()) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
 
-/** Cumulative sum of a quantity between `from` and now. */
-async function sumSince(
-  type: StatsArgs["type"],
-  unit: StatsArgs["unit"],
+function num(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function range(from: Date, to = new Date()) {
+  return {
+    operator: "between" as const,
+    startTime: from.toISOString(),
+    endTime: to.toISOString(),
+  };
+}
+
+/**
+ * Return null if this particular metric is unavailable or its permission
+ * has not been granted. Other metrics can still load normally.
+ */
+async function aggregate(
+  recordType: HealthRecordType,
   from: Date,
-): Promise<number> {
-  const result = await HealthKit.queryStatistics({
-    type,
-    unit,
-    from,
-    to: new Date(),
-    options: HealthKit.StatisticsOption.cumulativeSum,
-  });
-  return toNumber(result?.sum);
-}
+  to = new Date(),
+): Promise<any | null> {
+  try {
+    const allowed = await ensurePermission(recordType);
+    if (!allowed) return null;
 
-/* -------------------------------------------------------------------------- */
-/* Permissions (requested once, shared by every getter)                       */
-/* -------------------------------------------------------------------------- */
-
-async function requestHealthPermission(): Promise<void> {
-  const available = await HealthKit.isAvailable();
-
-  if (!available) {
-    throw new Error("Health data is not available on this device.");
+    return await aggregateRecord({
+      recordType: recordType as any,
+      timeRangeFilter: range(from, to),
+    } as any);
+  } catch (error) {
+    console.warn(`[Health Connect] Could not read ${recordType}:`, error);
+    return null;
   }
-
-  await HealthKit.requestAuthorization({
-    toRead: [
-      HealthKit.QuantityType.stepCount,
-      HealthKit.QuantityType.distanceWalkingRunning,
-      HealthKit.QuantityType.activeEnergyBurned,
-      HealthKit.CategoryType.sleepAnalysis,
-      HealthKit.QuantityType.bodyMass,
-      HealthKit.WorkoutType.workout,
-      HealthKit.QuantityType.dietaryEnergyConsumed,
-      HealthKit.QuantityType.dietaryWater,
-      HealthKit.QuantityType.dietaryCarbohydrates,
-      HealthKit.QuantityType.dietaryProtein,
-      HealthKit.QuantityType.dietaryFatTotal,
-    ],
-  });
 }
 
-let permissionPromise: Promise<void> | null = null;
+async function safeReadRecords(
+  recordType: HealthRecordType,
+  from: Date,
+  to = new Date(),
+  pageSize = 100,
+): Promise<any[]> {
+  try {
+    const allowed = await ensurePermission(recordType);
+    if (!allowed) return [];
 
-function ensurePermission(): Promise<void> {
-  if (!permissionPromise) {
-    permissionPromise = requestHealthPermission().catch((error) => {
-      permissionPromise = null; // allow a retry after a failure
-      throw error;
-    });
+    const result = await readRecords(recordType as any, {
+      timeRangeFilter: range(from, to),
+      pageSize,
+      ascending: false,
+    } as any);
+
+    return Array.isArray((result as any)?.records)
+      ? (result as any).records
+      : [];
+  } catch (error) {
+    console.warn(`[Health Connect] Could not read ${recordType}:`, error);
+    return [];
   }
-  return permissionPromise;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Activity                                                                   */
-/* -------------------------------------------------------------------------- */
 
 async function getActivity(): Promise<ActivityData> {
-  await ensurePermission();
-
-  const now = new Date();
   const today = startOfToday();
 
-  const [steps, distanceM, activeKcal, workoutResults] = await Promise.all([
-    sumSince(
-      HealthKit.QuantityType.stepCount,
-      HealthKit.Unit.count,
-      today,
-    ),
-    sumSince(
-      HealthKit.QuantityType.distanceWalkingRunning,
-      HealthKit.Unit.meter,
-      today,
-    ),
-    sumSince(
-      HealthKit.QuantityType.activeEnergyBurned,
-      HealthKit.Unit.kilocalorie,
-      today,
-    ),
-    HealthKit.queryWorkouts({
-      from: today,
-      to: now,
-      limit: 50,
-      ascending: false,
-    }),
-  ]);
+  const [stepsResult, distanceResult, caloriesResult, exerciseRecords] =
+    await Promise.all([
+      aggregate("Steps", today),
+      aggregate("Distance", today),
+      aggregate("ActiveCaloriesBurned", today),
+      safeReadRecords("ExerciseSession", today),
+    ]);
 
-  const workouts = Array.isArray(workoutResults)
-    ? workoutResults.map((workout: any) => ({
-        id: String(
-          workout.uuid ??
-            workout.id ??
-            `${workout.startDate}-${workout.activityType}`,
-        ),
-        name: String(
-          workout.activityTypeName ?? workout.activityType ?? "Workout",
-        ),
-        startedAt: new Date(workout.startDate).toISOString(),
-        durationMin: toNumber(workout.duration) / 60,
-        activeKcal:
-          workout.energyBurned !== undefined
-            ? toNumber(workout.energyBurned)
-            : undefined,
-      }))
-    : [];
+  const steps = num(stepsResult?.COUNT_TOTAL);
+
+  const distanceMeters = num(
+    distanceResult?.DISTANCE?.inMeters ??
+      (distanceResult?.DISTANCE?.inKilometers != null
+        ? num(distanceResult.DISTANCE.inKilometers) * 1000
+        : 0),
+  );
+  const distanceKm = distanceMeters / 1000;
+
+  const activeKcal = num(
+    caloriesResult?.ACTIVE_CALORIES_TOTAL?.inKilocalories ??
+      (caloriesResult?.ACTIVE_CALORIES_TOTAL?.inCalories != null
+        ? num(caloriesResult.ACTIVE_CALORIES_TOTAL.inCalories) / 1000
+        : caloriesResult?.inKilocalories),
+  );
+
+  const workouts = exerciseRecords.map((record: any) => ({
+    id: String(
+      record.metadata?.id ??
+        `${record.startTime}-${record.exerciseType ?? "workout"}`,
+    ),
+    name: String(record.title ?? record.exerciseType ?? "Workout"),
+    startedAt: record.startTime,
+    durationMin: Math.max(
+      0,
+      (new Date(record.endTime).getTime() -
+        new Date(record.startTime).getTime()) /
+        60000,
+    ),
+    activeKcal: undefined,
+  }));
 
   return {
     steps,
     stepGoal: GOALS.steps,
-    distanceKm: distanceM / 1000,
+    distanceKm,
     activeKcal,
     workouts,
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Sleep                                                                      */
-/* -------------------------------------------------------------------------- */
+async function getHydration(): Promise<HydrationData> {
+  const today = startOfToday();
+  const userId = await currentUserId();
 
-type Stage = "awake" | "deep" | "rem" | "light" | "unspecified";
-type Interval = [start: number, end: number];
+  const [todayResult, weekResult, manualTodayResult, manualWeekResult] = await Promise.all([
+    aggregate("Hydration", today),
+    Promise.all(
+      Array.from({ length: 7 }, async (_, index) => {
+        const from = daysAgo(6 - index);
+        const to = new Date(from);
+        to.setDate(to.getDate() + 1);
+        const result = await aggregate("Hydration", from, to);
+        const liters = num(result?.VOLUME_TOTAL?.inLiters);
+        const milliliters =
+          num(result?.VOLUME_TOTAL?.inMilliliters) || liters * 1000;
+        return { date: localDate(from), value: milliliters };
+      }),
+    ),
+    userId
+      ? supabase.from("hydration_logs").select("amount_ml, log_date")
+          .eq("user_id", userId).eq("log_date", localDate(today))
+      : Promise.resolve({ data: [], error: null } as any),
+    userId
+      ? supabase.from("hydration_logs").select("amount_ml, log_date")
+          .eq("user_id", userId)
+          .gte("log_date", localDate(daysAgo(6)))
+          .lte("log_date", localDate(today))
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
 
-/** HealthKit values: 0 inBed, 1 asleepUnspecified, 2 awake, 3 core, 4 deep, 5 REM. */
-function classifyStage(raw: unknown): Stage | null {
-  if (typeof raw === "number") {
-    if (raw === 1) return "unspecified";
-    if (raw === 2) return "awake";
-    if (raw === 3) return "light";
-    if (raw === 4) return "deep";
-    if (raw === 5) return "rem";
-    return null; // 0 = inBed and anything unknown
+  if (manualTodayResult.error) {
+    console.warn("[Supabase] Could not load today's manual hydration:", manualTodayResult.error.message);
+  }
+  if (manualWeekResult.error) {
+    console.warn("[Supabase] Could not load manual hydration history:", manualWeekResult.error.message);
   }
 
-  const text = String(raw ?? "").toLowerCase();
-  if (text.includes("inbed")) return null;
-  if (text.includes("awake")) return "awake";
-  if (text.includes("deep") || text.includes("slow_wave")) return "deep";
-  if (text.includes("rem")) return "rem";
-  if (text.includes("core") || text.includes("light")) return "light";
-  if (text.includes("asleep")) return "unspecified";
-  return null;
-}
-
-/** Total minutes covered by a set of intervals, counting overlaps once. */
-function mergedMinutes(intervals: Interval[]): number {
-  if (intervals.length === 0) return 0;
-
-  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
-  let total = 0;
-  let [curStart, curEnd] = sorted[0];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const [start, end] = sorted[i];
-    if (start <= curEnd) {
-      curEnd = Math.max(curEnd, end);
-    } else {
-      total += curEnd - curStart;
-      curStart = start;
-      curEnd = end;
-    }
+  const healthLiters = num(todayResult?.VOLUME_TOTAL?.inLiters);
+  const healthMl =
+    num(todayResult?.VOLUME_TOTAL?.inMilliliters) || healthLiters * 1000;
+  const manualTodayMl = (manualTodayResult.data ?? []).reduce(
+    (sum: number, row: any) => sum + num(row.amount_ml), 0,
+  );
+  const manualByDate = new Map<string, number>();
+  for (const row of manualWeekResult.data ?? []) {
+    const date = String(row.log_date);
+    manualByDate.set(date, (manualByDate.get(date) ?? 0) + num(row.amount_ml));
   }
-  total += curEnd - curStart;
 
-  return total / 60000;
+  const week = weekResult.map((entry) => ({
+    ...entry,
+    value: entry.value + (manualByDate.get(entry.date) ?? 0),
+  }));
+
+  // Manual logs are separate from Health Connect records, so add both sources.
+  return {
+    intakeMl: healthMl + manualTodayMl,
+    targetMl: GOALS.waterMl,
+    week,
+  };
 }
 
 async function getSleep(): Promise<SleepData> {
-  await ensurePermission();
-
-  // Yesterday 18:00 to now, so a night that started before midnight and a
-  // late wake-up are both captured regardless of the time of the query.
   const from = daysAgo(1);
   from.setHours(18, 0, 0, 0);
 
-  const samples = await HealthKit.queryCategorySamples({
-    type: HealthKit.CategoryType.sleepAnalysis,
-    from,
-    to: new Date(),
-    ascending: true,
-  });
+  const records = await safeReadRecords("SleepSession", from);
 
-  const byStage: Record<Stage, Interval[]> = {
-    awake: [],
-    deep: [],
-    rem: [],
-    light: [],
-    unspecified: [],
-  };
+  const sessions = records
+    .map((record: any) => ({
+      start: new Date(record.startTime).getTime(),
+      end: new Date(record.endTime).getTime(),
+      stages: Array.isArray(record.stages) ? record.stages : [],
+    }))
+    .filter(
+      (record: any) =>
+        Number.isFinite(record.start) &&
+        Number.isFinite(record.end) &&
+        record.end > record.start,
+    );
 
-  let firstSleepStart = Infinity;
-  let lastSleepEnd = -Infinity;
+  const durationMin = Math.round(
+    sessions.reduce(
+      (sum: number, session: any) => sum + (session.end - session.start),
+      0,
+    ) / 60000,
+  );
 
-  if (Array.isArray(samples)) {
-    for (const sample of samples as any[]) {
-      const start = new Date(sample.startDate).getTime();
-      const end = new Date(sample.endDate).getTime();
-      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-        continue;
-      }
-
-      const stage = classifyStage(
-        sample.value ?? sample.stage ?? sample.sleepStage,
-      );
-      if (!stage) continue;
-
-      byStage[stage].push([start, end]);
-
-      if (stage !== "awake") {
-        firstSleepStart = Math.min(firstSleepStart, start);
-        lastSleepEnd = Math.max(lastSleepEnd, end);
-      }
-    }
-  }
-
-  // If a device reports real stages (Apple Watch), ignore the generic
-  // "asleep" samples other sources write for the same night, which would
-  // otherwise be counted twice.
-  const hasStages =
-    byStage.deep.length + byStage.rem.length + byStage.light.length > 0;
-  const lightIntervals = hasStages
-    ? byStage.light
-    : [...byStage.light, ...byStage.unspecified];
-
-  const deepMin = mergedMinutes(byStage.deep);
-  const remMin = mergedMinutes(byStage.rem);
-  const lightMin = mergedMinutes(lightIntervals);
-  const awakeMin = mergedMinutes(byStage.awake);
-  const totalSleepMin = mergedMinutes([
-    ...byStage.deep,
-    ...byStage.rem,
-    ...lightIntervals,
-  ]);
-
-  const hasSleep = Number.isFinite(firstSleepStart);
+  const earliest =
+    sessions.length > 0
+      ? Math.min(...sessions.map((item: any) => item.start))
+      : undefined;
+  const latest =
+    sessions.length > 0
+      ? Math.max(...sessions.map((item: any) => item.end))
+      : undefined;
 
   return {
-    durationMin: Math.round(totalSleepMin),
+    durationMin,
     targetMin: GOALS.sleepMin,
     score:
-      totalSleepMin > 0
-        ? Math.min(100, Math.round((totalSleepMin / GOALS.sleepMin) * 100))
+      durationMin > 0
+        ? Math.min(100, Math.round((durationMin / GOALS.sleepMin) * 100))
         : undefined,
-    bedtime: hasSleep ? new Date(firstSleepStart).toISOString() : undefined,
-    wakeTime: hasSleep ? new Date(lastSleepEnd).toISOString() : undefined,
+    bedtime:
+      earliest === undefined ? undefined : new Date(earliest).toISOString(),
+    wakeTime: latest === undefined ? undefined : new Date(latest).toISOString(),
     stages: {
-      deepMin: Math.round(deepMin),
-      remMin: Math.round(remMin),
-      lightMin: Math.round(lightMin),
-      awakeMin: Math.round(awakeMin),
+      deepMin: 0,
+      remMin: 0,
+      lightMin: durationMin,
+      awakeMin: 0,
     },
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Body                                                                       */
-/* -------------------------------------------------------------------------- */
-
 async function getBody(): Promise<BodyData> {
-  await ensurePermission();
+  const records = await safeReadRecords("Weight", daysAgo(365), new Date(), 1000);
 
-  const samples = await HealthKit.queryQuantitySamples({
-    type: HealthKit.QuantityType.bodyMass,
-    unit: HealthKit.Unit.kilogram,
-    from: daysAgo(30),
-    to: new Date(),
-    ascending: false, // newest first
-  });
+  const healthHistory = records
+    .map((record: any) => {
+      const timestampValue = record.time ?? record.startTime;
+      const timestamp = new Date(timestampValue).getTime();
+      const weightKg = num(
+        record.weight?.inKilograms ??
+          (record.weight?.inGrams != null
+            ? num(record.weight.inGrams) / 1000
+            : record.weight?.inPounds != null
+              ? num(record.weight.inPounds) * 0.45359237
+              : 0),
+      );
+      return {
+        ts: timestamp,
+        date: Number.isFinite(timestamp) ? localDate(new Date(timestamp)) : "",
+        value: weightKg,
+        source: "health" as const,
+      };
+    })
+    .filter((item: any) => item.value > 0 && Number.isFinite(item.ts) && item.date.length > 0);
 
-  const parsed = Array.isArray(samples)
-    ? (samples as any[])
-        .map((sample) => {
-          const start = new Date(sample.startDate);
-          return {
-            ts: start.getTime(),
-            date: toLocalDate(start),
-            value: toNumber(
-              sample.value ??
-                sample.quantity ??
-                sample.amount ??
-                sample.quantityValue,
-            ),
-          };
-        })
-        .filter((item) => item.value > 0 && Number.isFinite(item.ts))
-    : [];
+  const userId = await currentUserId();
+  let manualHistory: Array<{ ts: number; date: string; value: number; source: "manual" }> = [];
+  if (userId) {
+    const { data, error } = await supabase
+      .from("body_measurements")
+      .select("measured_on, weight_kg, source")
+      .eq("user_id", userId)
+      .eq("source", "manual")
+      .gte("measured_on", localDate(daysAgo(365)))
+      .order("measured_on", { ascending: false });
 
-  if (parsed.length === 0) {
-    return { weightKg: undefined, history: [] };
+    if (error) {
+      console.warn("[Supabase] Could not load manual weight entries:", error.message);
+    } else {
+      manualHistory = (data ?? []).map((row: any) => ({
+        ts: new Date(`${row.measured_on}T12:00:00`).getTime(),
+        date: String(row.measured_on),
+        value: num(row.weight_kg),
+        source: "manual" as const,
+      })).filter((item) => item.value > 0 && Number.isFinite(item.ts));
+    }
   }
 
-  // Change across the last 7 days only (needs at least two readings in it).
+  // One value per calendar date. A manually entered value wins for that date.
+  const byDate = new Map<string, { ts: number; date: string; value: number; source: "manual" | "health" }>();
+  for (const item of healthHistory) {
+    const existing = byDate.get(item.date);
+    if (!existing || existing.source !== "manual") byDate.set(item.date, item);
+  }
+  for (const item of manualHistory) byDate.set(item.date, item);
+
+  const history = [...byDate.values()].sort((a, b) => b.ts - a.ts);
+  const latest = history[0];
   const weekAgo = daysAgo(7).getTime();
-  const lastWeek = parsed.filter((item) => item.ts >= weekAgo);
+  const recent = history.filter((item) => item.ts >= weekAgo);
   const weekChangeKg =
-    lastWeek.length >= 2
-      ? lastWeek[0].value - lastWeek[lastWeek.length - 1].value
-      : undefined;
+    recent.length >= 2 ? recent[0].value - recent[recent.length - 1].value : undefined;
 
   return {
-    weightKg: parsed[0].value,
+    weightKg: latest?.value,
     weekChangeKg,
-    history: parsed.map(({ date, value }) => ({ date, value })),
+    history: history.map(({ date, value }) => ({ date, value })),
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Nutrition                                                                  */
-/* -------------------------------------------------------------------------- */
-
 async function getNutrition(): Promise<NutritionData> {
-  await ensurePermission();
-
-  const today = startOfToday();
-
-  const [calories, proteinG, carbsG, fatG] = await Promise.all([
-    sumSince(
-      HealthKit.QuantityType.dietaryEnergyConsumed,
-      HealthKit.Unit.kilocalorie,
-      today,
-    ),
-    sumSince(HealthKit.QuantityType.dietaryProtein, HealthKit.Unit.gram, today),
-    sumSince(
-      HealthKit.QuantityType.dietaryCarbohydrates,
-      HealthKit.Unit.gram,
-      today,
-    ),
-    sumSince(HealthKit.QuantityType.dietaryFatTotal, HealthKit.Unit.gram, today),
+  const today = new Date();
+  const { start, end } = localDayBounds(today);
+  const [result, userId] = await Promise.all([
+    aggregate("Nutrition", startOfToday()),
+    currentUserId(),
   ]);
 
-  return { calories, proteinG, carbsG, fatG, meals: [] };
+  const healthCalories = num(
+    result?.ENERGY_TOTAL?.inKilocalories ??
+      (result?.ENERGY_TOTAL?.inCalories != null
+        ? num(result.ENERGY_TOTAL.inCalories) / 1000
+        : 0),
+  );
+  const healthProtein = num(result?.PROTEIN_TOTAL?.inGrams);
+  const healthCarbs = num(result?.TOTAL_CARBOHYDRATE_TOTAL?.inGrams);
+  const healthFat = num(result?.TOTAL_FAT_TOTAL?.inGrams);
+
+  let manual = { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+  if (userId) {
+    const { data, error } = await supabase
+      .from("food_logs")
+      .select("calories_kcal, protein_g, carbs_g, fat_g")
+      .eq("user_id", userId)
+      .gte("consumed_at", start)
+      .lt("consumed_at", end);
+
+    if (error) {
+      console.warn("[Supabase] Could not load manual nutrition logs:", error.message);
+    } else {
+      manual = (data ?? []).reduce((sum: typeof manual, row: any) => ({
+        calories: sum.calories + num(row.calories_kcal),
+        proteinG: sum.proteinG + num(row.protein_g),
+        carbsG: sum.carbsG + num(row.carbs_g),
+        fatG: sum.fatG + num(row.fat_g),
+      }), manual);
+    }
+  }
+
+  return {
+    calories: healthCalories + manual.calories,
+    proteinG: healthProtein + manual.proteinG,
+    carbsG: healthCarbs + manual.carbsG,
+    fatG: healthFat + manual.fatG,
+    meals: [],
+  };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Hydration                                                                  */
-/* -------------------------------------------------------------------------- */
-
-async function getHydration(): Promise<HydrationData> {
-  await ensurePermission();
-
-  const [intakeMl, weekResult] = await Promise.all([
-    sumSince(
-      HealthKit.QuantityType.dietaryWater,
-      HealthKit.Unit.milliliter,
-      startOfToday(),
-    ),
-    HealthKit.queryStatisticsCollection({
-      type: HealthKit.QuantityType.dietaryWater,
-      unit: HealthKit.Unit.milliliter,
-      from: daysAgo(6),
-      to: new Date(),
-      interval: { day: 1 },
-      options: HealthKit.StatisticsOption.cumulativeSum,
-    }),
-  ]);
-
-  const week = Array.isArray(weekResult)
-    ? weekResult
-        .map((item: any) => ({
-          date: String(item.date ?? item.startDate ?? ""),
-          value: toNumber(item.sum),
-        }))
-        .filter((item) => item.date !== "")
-    : [];
-
-  return { intakeMl, targetMl: GOALS.waterMl, week };
-}
-
-/* -------------------------------------------------------------------------- */
-/* Daily score                                                                */
-/* -------------------------------------------------------------------------- */
 
 async function getDailyScore(): Promise<DailyScore> {
   const [activity, hydration, sleep] = await Promise.all([
@@ -449,16 +495,13 @@ async function getDailyScore(): Promise<DailyScore> {
   ];
 
   const goalsComplete = goals.filter(Boolean).length;
-  const goalsTotal = goals.length;
 
   return {
-    value: Math.round((goalsComplete / goalsTotal) * 100),
+    value: Math.round((goalsComplete / goals.length) * 100),
     goalsComplete,
-    goalsTotal,
+    goalsTotal: goals.length,
   };
 }
-
-/* -------------------------------------------------------------------------- */
 
 export const healthDataSource: HealthDataSource = {
   getDailyScore,
