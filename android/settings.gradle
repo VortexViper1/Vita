@@ -15,15 +15,6 @@ pluginManagement {
     "../android/expo-gradle-plugin"
   ).absolutePath
   includeBuild(expoPluginsPath)
-
-  def expoModulesCorePlugin = new File(
-    providers.exec {
-      workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('expo-modules-core/package.json')")
-    }.standardOutput.asText.get().trim(),
-    "../expo-module-gradle-plugin"
-  ).absolutePath
-  includeBuild(expoModulesCorePlugin)
 }
 
 plugins {
@@ -40,7 +31,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
 }
 expoAutolinking.useExpoModules()
 
-rootProject.name = 'Health Tracker'
+rootProject.name = 'Vīta'
 
 expoAutolinking.useExpoVersionCatalog()
 
