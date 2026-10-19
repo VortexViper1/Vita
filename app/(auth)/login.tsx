@@ -57,9 +57,7 @@ export default function LoginScreen() {
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
-  const [statusMessage, setStatusMessage] = useState<string | undefined>();
 
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
@@ -75,54 +73,15 @@ export default function LoginScreen() {
   const passwordError =
     passwordTouched && !password ? "Enter your password." : undefined;
 
-  const clearMessages = useCallback(() => {
-    setFormError(undefined);
-    setStatusMessage(undefined);
-  }, []);
-
   const handleBack = useCallback(() => go("/(auth)/welcome"), [go]);
   const handleRegister = useCallback(() => go("/(auth)/register"), [go]);
-
-  const handleForgotPassword = useCallback(async () => {
-    if (isResetting) return;
-    clearMessages();
-
-    if (!EMAIL_PATTERN.test(email.trim())) {
-      setEmailTouched(true);
-      setFormError("Enter your email address first.");
-      emailRef.current?.focus();
-      return;
-    }
-
-    Keyboard.dismiss();
-    setIsResetting(true);
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-      );
-
-      if (error) {
-        setFormError(error.message);
-        return;
-      }
-
-      setStatusMessage(
-        "If an account exists for this email, a password reset link will be sent.",
-      );
-    } catch {
-      setFormError("Unable to request a reset link. Please try again.");
-    } finally {
-      setIsResetting(false);
-    }
-  }, [clearMessages, email, isResetting]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
 
     setEmailTouched(true);
     setPasswordTouched(true);
-    clearMessages();
+    setFormError(undefined);
 
     if (!EMAIL_PATTERN.test(email.trim())) {
       emailRef.current?.focus();
@@ -160,7 +119,7 @@ export default function LoginScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [clearMessages, email, go, isSubmitting, password]);
+  }, [email, go, isSubmitting, password]);
 
   return (
     <KeyboardAvoidingView
@@ -237,7 +196,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={(value) => {
               setEmail(value);
-              clearMessages();
+              setFormError(undefined);
             }}
             onBlur={() => setEmailTouched(true)}
             error={emailError}
@@ -258,7 +217,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={(value) => {
               setPassword(value);
-              clearMessages();
+              setFormError(undefined);
             }}
             onBlur={() => setPasswordTouched(true)}
             error={passwordError}
@@ -279,19 +238,6 @@ export default function LoginScreen() {
             }}
           />
 
-          <Pressable
-            onPress={handleForgotPassword}
-            disabled={isResetting}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: isResetting }}
-            hitSlop={8}
-            style={[styles.forgotPassword, isResetting && styles.dimmed]}
-          >
-            <Text style={[styles.forgotText, { color: b.accent }]}>
-              {isResetting ? "Sending…" : "Forgot password?"}
-            </Text>
-          </Pressable>
-
           {formError ? (
             <Text
               accessibilityRole="alert"
@@ -299,16 +245,6 @@ export default function LoginScreen() {
               style={[styles.message, { color: b.red }]}
             >
               {formError}
-            </Text>
-          ) : null}
-
-          {statusMessage ? (
-            <Text
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-              style={[styles.message, { color: b.accent }]}
-            >
-              {statusMessage}
             </Text>
           ) : null}
 
@@ -399,15 +335,6 @@ const styles = StyleSheet.create({
     maxWidth: 300,
   },
   form: { gap: spacing.lg },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    paddingVertical: 4,
-  },
-  dimmed: { opacity: 0.5 },
-  forgotText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
   message: {
     fontSize: 13,
     lineHeight: 19,

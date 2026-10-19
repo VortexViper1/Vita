@@ -204,7 +204,7 @@ options: {
   data: {
     full_name: values.fullName.trim(),
   },
-  emailRedirectTo: Linking.createURL("auth/callback"),
+  emailRedirectTo: "healthtracker://auth/callback",
 },
       });
 
