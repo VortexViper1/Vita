@@ -51,7 +51,7 @@ export default function AuthCallbackScreen() {
         }
 
         if (active) {
-          setMessage("Email verified! Opening Vīta...");
+          setMessage("Email verified! Opening Vita...");
           router.replace("/(tabs)");
         }
       } catch (error) {

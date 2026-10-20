@@ -541,7 +541,7 @@ export function AnimatedSplash({
     <Animated.View
       collapsable={false}
       accessible
-      accessibilityLabel="Vīta is loading"
+      accessibilityLabel="Vita is loading"
       onLayout={() => {
         if (shownRef.current) return;
         shownRef.current = true;
@@ -562,7 +562,7 @@ export function AnimatedSplash({
 
         <Animated.View style={nameStyle}>
           <Text variant="display" style={styles.name}>
-            Vīta
+            Vita
           </Text>
         </Animated.View>
 

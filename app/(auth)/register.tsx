@@ -455,7 +455,7 @@ options: {
 
         <View style={styles.footer}>
           <TextLink
-            prompt="Already part of Vīta?"
+            prompt="Already part of Vita?"
             actionLabel="Sign in"
             onPress={handleSignIn}
           />

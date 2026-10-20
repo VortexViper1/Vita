@@ -6,7 +6,7 @@ import { useTheme } from "./ThemeProvider";
 export const serif = Platform.select({ ios: "Georgia", default: "serif" });
 
 /**
- * Vīta brand palette for the auth/onboarding screens: botanical green, mint,
+ * Vita brand palette for the auth/onboarding screens: botanical green, mint,
  * champagne gold, warm ivory. Follows the app's light/dark mode.
  */
 export function useBrand() {

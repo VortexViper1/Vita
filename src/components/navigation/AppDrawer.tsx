@@ -140,7 +140,7 @@ export default function AppDrawer({
         clearTimeout(navigateTimeout.current);
       }
 
-      // Start the shared Vīta transition after the drawer closes.
+      // Start the shared Vita transition after the drawer closes.
       navigateTimeout.current = setTimeout(() => {
         navigateTimeout.current = null;
         go(route);
@@ -212,7 +212,7 @@ export default function AppDrawer({
 
           <View style={styles.header}>
             <View>
-              <Text variant="heading2">Vīta</Text>
+              <Text variant="heading2">Vita</Text>
 
               <Text
                 variant="label"

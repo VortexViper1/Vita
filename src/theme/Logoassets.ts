@@ -1,7 +1,7 @@
 import type { ImageSourcePropType } from "react-native";
 
 /**
- * Point these at your real Vīta logo files, for example:
+ * Point these at your real Vita logo files, for example:
  *   light: require("../../../assets/images/vita-logo.png"),
  * `light` is the logo for light backgrounds, `dark` for dark backgrounds
  * (leave `dark` null to reuse `light`). Set aspectRatio to width / height.

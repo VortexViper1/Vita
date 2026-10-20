@@ -270,8 +270,8 @@ function BodyContent({ data }: { data: BodyData }) {
     Alert.alert(
       hasSynced ? "Health sync" : "No measurements synced",
       Platform.OS === "ios"
-        ? "Vīta reads weight from Apple Health when Body Mass access is allowed. Open the Health app, check your Weight records and Vīta's read permission, then return and refresh."
-        : "Vīta reads weight from Health Connect when Body Mass access is allowed. Open Health Connect, check app permissions and make sure a connected app has saved a Weight record, then return and refresh.",
+        ? "Vita reads weight from Apple Health when Body Mass access is allowed. Open the Health app, check your Weight records and Vita's read permission, then return and refresh."
+        : "Vita reads weight from Health Connect when Body Mass access is allowed. Open Health Connect, check app permissions and make sure a connected app has saved a Weight record, then return and refresh.",
       [{ text: "OK" }],
     );
   }
@@ -716,7 +716,7 @@ function BodyContent({ data }: { data: BodyData }) {
           <View style={styles.dialog}>
             <Text style={styles.dialogTitle}>Add weight</Text>
             <Text style={styles.dialogText}>
-              Enter your weight for today. It's saved to your Vīta account.
+              Enter your weight for today. It's saved to your Vita account.
             </Text>
             <View style={styles.inputRow}>
               <TextInput

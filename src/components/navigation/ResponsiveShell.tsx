@@ -170,7 +170,7 @@ function DesktopRail({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brand}>
-          <Text variant="heading2">Vīta</Text>
+          <Text variant="heading2">Vita</Text>
 
           <Text
             variant="label"

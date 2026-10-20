@@ -112,7 +112,7 @@ export default function LoginScreen() {
         return;
       }
 
-      // Show Vīta's transition splash, then open the dashboard.
+      // Show Vita's transition splash, then open the dashboard.
       go("/(tabs)");
     } catch {
       setFormError("Unable to sign in right now. Please try again.");
@@ -249,7 +249,7 @@ export default function LoginScreen() {
           ) : null}
 
           <Button
-            label={isSubmitting ? "Signing in…" : "Continue to Vīta"}
+            label={isSubmitting ? "Signing in…" : "Continue to Vita"}
             onPress={handleSubmit}
             loading={isSubmitting}
           />
@@ -268,7 +268,7 @@ export default function LoginScreen() {
 
         <View style={styles.footer}>
           <TextLink
-            prompt="New to Vīta?"
+            prompt="New to Vita?"
             actionLabel="Create an account"
             onPress={handleRegister}
           />

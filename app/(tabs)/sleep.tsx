@@ -495,7 +495,7 @@ function SleepContent({
           <Text style={[styles.eyebrow, { color: brand.soft }]}>YOUR SLEEP JOURNAL</Text>
           <Text style={[styles.manualTitle, { color: brand.ink }]}>Add a night manually</Text>
           <Text style={[styles.bodyText, { color: brand.soft }]}>
-            No watch? No problem. Enter your sleep and wake-up times and Vīta calculates your duration.
+            No watch? No problem. Enter your sleep and wake-up times and Vita calculates your duration.
           </Text>
         </View>
         <Pressable
@@ -653,7 +653,7 @@ function SleepContent({
         </Section>
       ) : null}
 
-      <Section title="Manual sleep history" description="Only entries saved to your Vīta account appear here.">
+      <Section title="Manual sleep history" description="Only entries saved to your Vita account appear here.">
         <View style={[styles.historyCard, { backgroundColor: brand.panel, borderColor: brand.line }]}>
           <View style={styles.historyHeader}>
             <Text style={[styles.historyTitle, { color: brand.ink }]}>Recent entries</Text>

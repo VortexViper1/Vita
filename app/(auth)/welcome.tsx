@@ -142,7 +142,7 @@ export default function WelcomeScreen() {
           onPress={handleSignIn}
         />
         <Text style={[styles.footnote, { color: b.soft }]}>
-          YOUR WELLBEING. YOUR PACE. YOUR VĪTA.
+          YOUR WELLBEING. YOUR PACE. YOUR Vita.
         </Text>
       </Animated.View>
     </View>

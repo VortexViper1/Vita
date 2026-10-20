@@ -32,7 +32,7 @@ function useReveal(delay: number) {
   }));
 }
 
-/** Vīta brand loader: three orbiting activity rings, a self-drawing V, wordmark and tagline. */
+/** Vita brand loader: three orbiting activity rings, a self-drawing V, wordmark and tagline. */
 export function VitaLoader() {
   const word = useReveal(600);
   const tag = useReveal(850);
@@ -42,7 +42,7 @@ export function VitaLoader() {
       style={styles.center}
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel="Loading Vīta"
+      accessibilityLabel="Loading Vita"
     >
       <View style={styles.box}>
         <RotatingVitaRing size={BOX} />
@@ -50,7 +50,7 @@ export function VitaLoader() {
 
       <Animated.View style={word}>
         <Text variant="display" style={styles.word}>
-          Vīta
+          Vita
         </Text>
       </Animated.View>
       <Animated.View style={tag}>

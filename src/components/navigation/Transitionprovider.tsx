@@ -249,7 +249,7 @@ function Overlay({
   }));
 
   // ========================================
-  // VĪTA LOADER
+  // Vita LOADER
   // ========================================
 
   const logo = useAnimatedStyle(() => ({

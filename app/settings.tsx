@@ -141,7 +141,7 @@ export default function SettingsScreen() {
                 { color: colors.textSecondary },
               ]}
             >
-              Vīta preferences
+              Vita preferences
             </Text>
           </View>
 
@@ -177,7 +177,7 @@ export default function SettingsScreen() {
               { color: colors.textSecondary },
             ]}
           >
-            Make Vīta feel like yours. Adjust your
+            Make Vita feel like yours. Adjust your
             experience to fit your everyday routine.
           </Text>
         </View>
@@ -409,7 +409,7 @@ export default function SettingsScreen() {
               { color: colors.textMuted },
             ]}
           >
-            Your theme preference is managed by Vīta.
+            Your theme preference is managed by Vita.
           </Text>
         </View>
 
@@ -419,7 +419,7 @@ export default function SettingsScreen() {
             { color: colors.textMuted },
           ]}
         >
-          VĪTA  ·  YOUR DAILY RECORD
+          Vita  ·  YOUR DAILY RECORD
         </Text>
       </ScrollView>
     </SafeAreaView>

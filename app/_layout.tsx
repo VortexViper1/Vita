@@ -6,7 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../src/lib/supabase";
 import { ThemeProvider } from "../src/theme/ThemeProvider";
 import { TransitionProvider } from "../src/components/navigation/Transitionprovider";
-import { SplashGate } from "../src/components/splash/splashgate";
+import { SplashGate } from "../src/components/splash/Splashgate";
 
 // Note: SplashScreen.preventAutoHideAsync / setOptions / hideAsync now live in
 // SplashGate, which hides the native splash once the animated one is on screen.
