@@ -1,31 +1,22 @@
-
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
-import * as SplashScreen from "expo-splash-screen";
 
 import { supabase } from "../src/lib/supabase";
-import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
+import { ThemeProvider } from "../src/theme/ThemeProvider";
 import { TransitionProvider } from "../src/components/navigation/Transitionprovider";
-import { VitaLoader } from "../src/components/ui/VitaLoader";
+import { SplashGate } from "../src/components/splash/splashgate";
 
-SplashScreen.setOptions({
-  duration: 600,
-  fade: true,
-});
-
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Note: SplashScreen.preventAutoHideAsync / setOptions / hideAsync now live in
+// SplashGate, which hides the native splash once the animated one is on screen.
 
 function AuthGate() {
   const router = useRouter();
   const segments = useSegments();
-  const { colors } = useTheme();
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rootLaidOut, setRootLaidOut] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -82,16 +73,6 @@ function AuthGate() {
     };
   }, []);
 
-  const onLayoutRootView = useCallback(() => {
-    setRootLaidOut(true);
-  }, []);
-
-  useEffect(() => {
-    if (!rootLaidOut) return;
-
-    void SplashScreen.hideAsync().catch(() => {});
-  }, [rootLaidOut]);
-
   useEffect(() => {
     if (loading) return;
 
@@ -109,24 +90,10 @@ function AuthGate() {
   }, [loading, session, segments, router]);
 
   return (
-    <View
-      onLayout={onLayoutRootView}
-      style={{
-        flex: 1,
-        backgroundColor: colors.background,
-      }}
-    >
-      {loading ? (
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <VitaLoader />
-        </View>
-      ) : (
+    // The animated splash covers the app until the session is restored
+    // (minimum ~3s), then fades out to whichever screen the redirect chose.
+    <SplashGate ready={!loading}>
+      {loading ? null : (
         <TransitionProvider>
           <Stack
             screenOptions={{
@@ -136,7 +103,7 @@ function AuthGate() {
           />
         </TransitionProvider>
       )}
-    </View>
+    </SplashGate>
   );
 }
 
