@@ -40,7 +40,7 @@
     "android": {
       "package": "com.anonymous.healthtracker",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/icon.jpeg",
         "backgroundColor": "#0A0F0D"
       },
       "permissions": [
